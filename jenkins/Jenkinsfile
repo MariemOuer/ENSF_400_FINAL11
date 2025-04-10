@@ -1,0 +1,182 @@
+
+pipeline {
+
+  agent any
+
+  environment {
+      // Let Python API tests recognize the Zap proxy
+      HTTP_PROXY = 'http://127.0.0.1:9888'
+
+      //  Ensures Java 17 is used
+      JAVA_HOME = '/opt/java/openjdk'
+      PATH = "/opt/java/openjdk/bin:$PATH"
+      ORG_GRADLE_JAVA_INSTALLATIONS_AUTO_DOWNLOAD = 'false'
+  }
+
+  stages {
+
+    // Build the binary
+    stage('Build') {
+      steps {
+        //  Confirm Java version being used
+        sh 'java -version'
+        sh './gradlew clean assemble'
+      }
+    }
+
+    // Unit tests
+    stage('Unit Tests') {
+      steps {
+        sh './gradlew test'
+      }
+      post {
+        always {
+          junit 'build/test-results/test/*.xml'
+        }
+      }
+    }
+
+    // Database integration tests
+    stage('Database Tests') {
+      steps {
+        sh './gradlew integrate'
+      }
+      post {
+        always {
+          junit 'build/test-results/integrate/*.xml'
+        }
+      }
+    }
+
+    // Behavior Driven Development tests
+    stage('BDD Tests') {
+      steps {
+        sh './gradlew generateCucumberReports'
+        sh './gradlew jacocoTestReport'
+      }
+      post {
+        always {
+          junit 'build/test-results/bdd/*.xml'
+        }
+      }
+    }
+    
+    // // Static code analysis
+    // stage('Static Analysis') {
+    //   steps {
+    //     sh './gradlew sonarqube'
+    //     sleep 5
+    //     sh './gradlew checkQualityGate'
+    //   }
+    // }
+
+/*
+    // Deploy to test environment
+    stage('Deploy to Test') {
+      steps {
+        sh './gradlew deployToTestWindowsLocal'
+        sh 'PIPENV_IGNORE_VIRTUALENVS=1 pipenv install'
+        sh './gradlew waitForHeartBeat'
+        sh 'curl http://zap/JSON/core/action/newSession -s --proxy localhost:9888'
+      }
+    }
+
+    // API test automation
+    stage('API Tests') {
+      steps {
+        sh './gradlew runApiTests'
+      }
+      post {
+        always {
+          junit 'build/test-results/api_tests/*.xml'
+        }
+      }
+    }
+
+    // UI Behavior Driven Development tests
+    stage('UI BDD Tests') {
+      steps {
+        sh './gradlew runBehaveTests'
+        sh './gradlew generateCucumberReport'
+      }
+      post {
+        always {
+          junit 'build/test-results/bdd_ui/*.xml'
+        }
+      }
+    }
+
+    // Detailed UI tests
+    stage('UI Tests') {
+      steps {
+        sh 'cd src/ui_tests/java && ./gradlew clean test'
+      }
+      post {
+        always {
+          junit 'src/ui_tests/java/build/test-results/test/*.xml'
+        }
+      }
+    }
+*/
+    // Security dependency analysis using OWASP
+    stage('Security: Dependency Analysis') {
+      steps {
+        sh './gradlew dependencyCheckAnalyze'
+      }
+    }
+
+    // // Performance testing with JMeter
+    // stage('Performance Tests') {
+    //   steps {
+    //     sh './gradlew runPerfTests'
+    //   }
+      // }
+      stage('Performance Tests') {
+        steps {
+          sh '''
+            # Download and extract JMeter
+            curl -s https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.2.tgz -o jmeter.tgz
+            tar -xzf jmeter.tgz
+      
+            # Add JMeter to PATH
+            export PATH=$PWD/apache-jmeter-5.6.2/bin:$PATH
+      
+            # Run your Gradle performance test
+            ./gradlew runPerfTests
+          '''
+        }
+    }
+
+
+
+    // Mutation testing to assess test coverage quality
+    stage('Mutation Tests') {
+      steps {
+        sh './gradlew pitest'
+      }
+    }
+
+    // Javadoc generation
+    stage('Build Documentation') {
+      steps {
+        sh './gradlew javadoc'
+      }
+    }
+/*
+    // Collect ZAP security report
+    stage('Collect Zap Security Report') {
+      steps {
+        sh 'mkdir -p build/reports/zap'
+        sh 'curl http://zap/OTHER/core/other/htmlreport --proxy localhost:9888 > build/reports/zap/zap_report.html'
+      }
+    }
+*/
+    // Final step simulating a production deploy
+    stage('Deploy to Prod') {
+      steps {
+        sh 'sleep 5'
+      }
+    }
+
+  }
+}
